@@ -1,5 +1,6 @@
 // src/components/profile/Profile.tsx
-import React, { useState, ChangeEvent } from 'react';
+import React, { useState} from 'react';
+import type { ChangeEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../api/apiClient';
 import { useAuth } from '../../context/AuthContext';
@@ -21,9 +22,11 @@ import {
 } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import ChangePassword from './ChangePassword';
+import {useNavigate} from 'react-router-dom';
 
 const Profile: React.FC = () => {
     const queryClient = useQueryClient();
+    const navigate = useNavigate();
     const { user: authUser, updateUser } = useAuth();
     const [isEditing, setIsEditing] = useState(false);
     const [fullName, setFullName] = useState('');
@@ -222,19 +225,29 @@ const Profile: React.FC = () => {
                                     helperText="Select a file to upload as your avatar. Max 5MB."
                                 />
                             )}
-                            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
-                                <Button variant="outlined" onClick={handleEditToggle} sx={{ mr: 2 }}>
-                                    {isEditing ? 'Cancel' : 'Edit Profile'}
+                            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Button onClick={() => navigate('/dashboard')}>
+                                    Back to Dashboard
                                 </Button>
-                                {isEditing && (
-                                    <Button
-                                        type="submit"
-                                        variant="contained"
-                                        disabled={updateProfileMutation.isPending}
-                                    >
-                                        {updateProfileMutation.isPending ? <CircularProgress size={24} color="inherit" /> : 'Save Changes'}
+
+                                <Box sx={{ display: 'flex', gap: 2 }}>
+                                    <Button variant="outlined" onClick={handleEditToggle}>
+                                        {isEditing ? 'Cancel' : 'Edit Profile'}
                                     </Button>
-                                )}
+                                    {isEditing && (
+                                        <Button
+                                            type="submit"
+                                            variant="contained"
+                                            disabled={updateProfileMutation.isPending}
+                                        >
+                                            {updateProfileMutation.isPending ? (
+                                                <CircularProgress size={24} color="inherit" />
+                                            ) : (
+                                                'Save Changes'
+                                            )}
+                                        </Button>
+                                    )}
+                                </Box>
                             </Box>
                         </Box>
                     </Box>
