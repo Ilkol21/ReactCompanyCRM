@@ -1,6 +1,5 @@
 // src/components/profile/Profile.tsx
-import React, { useState} from 'react';
-import type { ChangeEvent } from 'react';
+import React, { useState, ChangeEvent, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../api/apiClient';
 import { useAuth } from '../../context/AuthContext';
@@ -22,18 +21,43 @@ import {
 } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import ChangePassword from './ChangePassword';
-import {useNavigate} from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+
+function getAvatarUrl(avatar: string | undefined, baseUrl: string): string | undefined {
+    if (!avatar) return undefined;
+    if (avatar.startsWith('http')) return avatar;
+
+    // Добавляем слэш между baseUrl и avatar, если его нет
+    const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : baseUrl + '/';
+    const normalizedAvatar = avatar.startsWith('/') ? avatar.slice(1) : avatar;
+
+    return `${normalizedBaseUrl}${normalizedAvatar}`;
+}
+
+const validateEmail = (email: string): boolean => {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return re.test(email);
+};
 
 const Profile: React.FC = () => {
     const queryClient = useQueryClient();
     const navigate = useNavigate();
+    const location = useLocation();
     const { user: authUser, updateUser } = useAuth();
+
     const [isEditing, setIsEditing] = useState(false);
     const [fullName, setFullName] = useState('');
     const [email, setEmail] = useState('');
     const [avatar, setAvatar] = useState('');
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [selectedTab, setSelectedTab] = useState(0);
+
+    // Инвалидируем кеш профиля при заходе на этот маршрут (при смене location.pathname)
+    useEffect(() => {
+        if (authUser?.id) {
+            queryClient.invalidateQueries(['userProfile', authUser.id]);
+        }
+    }, [location.pathname, authUser?.id, queryClient]);
 
     const {
         data: userProfile,
@@ -53,6 +77,7 @@ const Profile: React.FC = () => {
             setEmail(data.email);
             setAvatar(data.avatar || '');
         },
+        staleTime: 0, // Данные считаются устаревшими сразу, чтобы React Query всегда обновлял их при монтировании
     });
 
     const updateProfileMutation = useMutation({
@@ -66,6 +91,7 @@ const Profile: React.FC = () => {
         },
         onError: (err: any) => {
             console.error('Update profile error:', err);
+            console.error('Response data:', err.response?.data);
             toast.error(err.response?.data?.message || 'Failed to update profile.');
         },
     });
@@ -81,6 +107,7 @@ const Profile: React.FC = () => {
             });
         },
         onSuccess: (data) => {
+            console.log('Avatar upload response:', data);
             toast.success('Avatar uploaded successfully!');
             queryClient.invalidateQueries({ queryKey: ['userProfile', authUser?.id] });
             updateUser(data.data.user);
@@ -96,6 +123,11 @@ const Profile: React.FC = () => {
     const handleEditToggle = () => {
         setIsEditing(!isEditing);
         setSelectedFile(null);
+        if (isEditing && userProfile) {
+            setFullName(userProfile.fullName);
+            setEmail(userProfile.email);
+            setAvatar(userProfile.avatar || '');
+        }
     };
 
     const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -108,23 +140,42 @@ const Profile: React.FC = () => {
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
-        const profileUpdatePromise = updateProfileMutation.mutateAsync({
-            fullName,
-            email,
-            avatar: avatar || null,
-        });
 
-        if (selectedFile) {
-            await profileUpdatePromise;
-            uploadAvatarMutation.mutate(selectedFile);
-        } else {
-            await profileUpdatePromise;
+        const updatedData: { fullName?: string; email?: string } = {};
+
+        if (fullName.trim() && fullName.trim() !== userProfile?.fullName) {
+            updatedData.fullName = fullName.trim();
+        }
+
+        if (email.trim() && email.trim() !== userProfile?.email) {
+            if (!validateEmail(email.trim())) {
+                toast.error('Invalid email format');
+                return;
+            }
+            updatedData.email = email.trim();
+        }
+
+        try {
+            if (Object.keys(updatedData).length > 0) {
+                await updateProfileMutation.mutateAsync(updatedData);
+            }
+            if (selectedFile) {
+                uploadAvatarMutation.mutate(selectedFile);
+            }
+
+            setIsEditing(false);
+        } catch (err) {
+            console.error('Update profile error:', err);
         }
     };
 
     const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
         setSelectedTab(newValue);
     };
+
+    const avatarUrl = avatar
+        ? getAvatarUrl(avatar, apiClient.defaults.baseURL || '') + `?t=${Date.now()}`
+        : undefined;
 
     if (isLoading) {
         return (
@@ -163,9 +214,7 @@ const Profile: React.FC = () => {
                                 src={
                                     selectedFile
                                         ? URL.createObjectURL(selectedFile)
-                                        : avatar
-                                            ? `${apiClient.defaults.baseURL}${avatar}`
-                                            : undefined
+                                        : avatarUrl
                                 }
                                 sx={{ width: 100, height: 100, mb: 2 }}
                             >
@@ -183,8 +232,7 @@ const Profile: React.FC = () => {
                                 label="Full Name"
                                 value={fullName}
                                 onChange={(e) => setFullName(e.target.value)}
-                                disabled={!isEditing || updateProfileMutation.isPending}
-                                required
+                                disabled={!isEditing || updateProfileMutation.isLoading}
                             />
                             <TextField
                                 margin="normal"
@@ -192,8 +240,7 @@ const Profile: React.FC = () => {
                                 label="Email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                disabled={!isEditing || updateProfileMutation.isPending}
-                                required
+                                disabled={!isEditing || updateProfileMutation.isLoading}
                             />
                             {isEditing && (
                                 <TextField
@@ -202,7 +249,7 @@ const Profile: React.FC = () => {
                                     label="Upload New Avatar"
                                     type="text"
                                     value={selectedFile ? selectedFile.name : ''}
-                                    disabled={updateProfileMutation.isPending || uploadAvatarMutation.isPending}
+                                    disabled={updateProfileMutation.isLoading || uploadAvatarMutation.isLoading}
                                     InputProps={{
                                         readOnly: true,
                                         endAdornment: (
@@ -215,7 +262,7 @@ const Profile: React.FC = () => {
                                                     accept="image/*"
                                                 />
                                                 <label htmlFor="avatar-upload-input">
-                                                    <IconButton component="span" disabled={updateProfileMutation.isPending || uploadAvatarMutation.isPending}>
+                                                    <IconButton component="span" disabled={updateProfileMutation.isLoading || uploadAvatarMutation.isLoading}>
                                                         <CloudUploadIcon />
                                                     </IconButton>
                                                 </label>
@@ -238,9 +285,9 @@ const Profile: React.FC = () => {
                                         <Button
                                             type="submit"
                                             variant="contained"
-                                            disabled={updateProfileMutation.isPending}
+                                            disabled={updateProfileMutation.isLoading}
                                         >
-                                            {updateProfileMutation.isPending ? (
+                                            {updateProfileMutation.isLoading ? (
                                                 <CircularProgress size={24} color="inherit" />
                                             ) : (
                                                 'Save Changes'

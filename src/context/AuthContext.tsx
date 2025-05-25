@@ -1,11 +1,11 @@
 // src/contexts/AuthContext.tsx
-import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { jwtDecode } from 'jwt-decode';
 import { io, Socket } from 'socket.io-client';
 import { toast } from 'react-toastify';
 import { useQueryClient } from '@tanstack/react-query';
-import { injectStore } from '../api/apiClient'; // <-- Заменено
+import { injectStore } from '../api/apiClient';
 import { Role, type Company, type User } from '@/types';
 import { normalizeRole } from '@/utils/roles';
 
@@ -35,27 +35,31 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [tokens, setTokens] = useState<AuthTokens | null>(null);
-    const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
     const socketRef = useRef<Socket | null>(null);
     const queryClient = useQueryClient();
 
-    const login = (accessToken: string, refreshToken: string, userData: User) => {
+    // Логика входа
+    const login = useCallback((accessToken: string, refreshToken: string, userData: User) => {
         const newTokens = { accessToken, refreshToken };
         setTokens(newTokens);
-        setUser(userData);
+        const normalizedUser = { ...userData, role: normalizeRole(userData.role) };
+        setUser(normalizedUser);
         setIsAuthenticated(true);
         localStorage.setItem('authTokens', JSON.stringify(newTokens));
-        localStorage.setItem('user', JSON.stringify(userData));
-    };
+        localStorage.setItem('user', JSON.stringify(normalizedUser));
+    }, []);
 
-    const logout = () => {
+    // Логика выхода
+    const logout = useCallback(() => {
         setTokens(null);
         setUser(null);
         setIsAuthenticated(false);
         localStorage.removeItem('authTokens');
         localStorage.removeItem('user');
-    };
+    }, []);
 
+    // При загрузке контекста, проверяем localStorage и токен
     useEffect(() => {
         const storedAuthTokens = localStorage.getItem('authTokens');
         const storedUser = localStorage.getItem('user');
@@ -64,7 +68,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             try {
                 const parsedTokens: AuthTokens = JSON.parse(storedAuthTokens);
                 const parsedUser: User = JSON.parse(storedUser);
-
                 parsedUser.role = normalizeRole(parsedUser.role);
 
                 const decodedToken: { exp: number } = jwtDecode(parsedTokens.accessToken);
@@ -80,44 +83,59 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 console.error('Failed to parse stored auth data or JWT decode error:', error);
                 logout();
             }
-        }else {
+        } else {
             setIsAuthenticated(false);
         }
+    }, [logout]);
+
+    // Обновление пользователя в состоянии и localStorage
+    const updateUser = useCallback((newUser: Partial<User>) => {
+        setUser((prevUser) => {
+            if (prevUser) {
+                const updatedUser = { ...prevUser, ...newUser };
+                localStorage.setItem('user', JSON.stringify(updatedUser));
+                return updatedUser;
+            }
+            return null;
+        });
     }, []);
 
+    // Проверка ролей
+    const hasRole = useCallback((requiredRole: Role): boolean => {
+        if (!user) return false;
+        const roleHierarchy = {
+            [Role.User]: 1,
+            [Role.Admin]: 2,
+            [Role.SuperAdmin]: 3,
+        };
+        return roleHierarchy[user.role] >= roleHierarchy[requiredRole];
+    }, [user]);
+
+    // Проверка владельца ресурса
+    const isOwner = useCallback((resourceOwnerId: number | null | undefined): boolean => {
+        if (!user || resourceOwnerId === undefined || resourceOwnerId === null) {
+            return false;
+        }
+        return user.id === resourceOwnerId;
+    }, [user]);
+
+    // Обновляем API клиент и socket
     useEffect(() => {
         const authApiForInterceptor: AuthContextType = {
-            user, tokens, isAuthenticated, login, logout,
-            updateUser: (newUser: Partial<User>) => {
-                setUser(prevUser => {
-                    if (prevUser) {
-                        const updatedUser = { ...prevUser, ...newUser };
-                        localStorage.setItem('user', JSON.stringify(updatedUser));
-                        return updatedUser;
-                    }
-                    return null;
-                });
-            },
-            hasRole: (requiredRole: Role): boolean => {
-                if (!user) return false;
-                const roleHierarchy = {
-                    [Role.User]: 1,
-                    [Role.Admin]: 2,
-                    [Role.SuperAdmin]: 3,
-                };
-                return roleHierarchy[user.role] >= roleHierarchy[requiredRole];
-            },
-            isOwner: (resourceOwnerId: number | null | undefined): boolean => {
-                if (!user || resourceOwnerId === undefined || resourceOwnerId === null) {
-                    return false;
-                }
-                return user.id === resourceOwnerId;
-            },
-            socket: socketRef.current
+            user,
+            tokens,
+            isAuthenticated,
+            login,
+            logout,
+            updateUser,
+            hasRole,
+            isOwner,
+            socket: socketRef.current,
         };
-        injectStore(authApiForInterceptor); // <-- Заменено
-    }, [user, tokens, isAuthenticated, socketRef.current]);
+        injectStore(authApiForInterceptor);
+    }, [user, tokens, isAuthenticated, login, logout, updateUser, hasRole, isOwner]);
 
+    // WebSocket подключение и управление
     useEffect(() => {
         if (isAuthenticated && tokens?.accessToken) {
             const newSocket = io(import.meta.env.VITE_WS_URL, {
@@ -141,7 +159,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             });
 
             newSocket.on('companyUpdated', (updatedCompany: Company) => {
-                toast.info(`Company "${updatedCompany.name}" was updated in real-time!`);
+                toast.info(`Company "${updatedCompany.name}" was updated in real time!`);
                 queryClient.invalidateQueries({ queryKey: ['companies'] });
                 queryClient.invalidateQueries({ queryKey: ['company', updatedCompany.id] });
                 queryClient.invalidateQueries({ queryKey: ['dashboardStats'] });
@@ -149,7 +167,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             });
 
             newSocket.on('companyDeleted', (data: { id: number }) => {
-                toast.info(`Company (ID: ${data.id}) was deleted in real-time!`);
+                toast.info(`Company (ID: ${data.id}) was deleted in real time!`);
                 queryClient.invalidateQueries({ queryKey: ['companies'] });
                 queryClient.invalidateQueries({ queryKey: ['company', data.id] });
                 queryClient.invalidateQueries({ queryKey: ['dashboardStats'] });
@@ -157,13 +175,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             });
 
             newSocket.on('userUpdated', (updatedUser: User) => {
-                toast.info(`User "${updatedUser.fullName}" was updated in real-time!`);
+                toast.info(`User "${updatedUser.fullName}" was updated in real time!`);
                 queryClient.invalidateQueries({ queryKey: ['users'] });
                 queryClient.invalidateQueries({ queryKey: ['userProfile', updatedUser.id] });
+                if (user?.id === updatedUser.id) {
+                    updateUser(updatedUser);
+                }
             });
 
             newSocket.on('userDeleted', (data: { id: number }) => {
-                toast.info(`User (ID: ${data.id}) was deleted in real-time!`);
+                toast.info(`User (ID: ${data.id}) was deleted in real time!`);
                 queryClient.invalidateQueries({ queryKey: ['users'] });
                 queryClient.invalidateQueries({ queryKey: ['userProfile', data.id] });
                 if (user?.id === data.id) {
@@ -181,48 +202,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             socketRef.current.disconnect();
             socketRef.current = null;
         }
-    }, [isAuthenticated, tokens?.accessToken, logout, queryClient, user?.id]);
+    }, [isAuthenticated, tokens?.accessToken, logout, queryClient, user?.id, updateUser]);
 
-    const updateUser = (newUser: Partial<User>) => {
-        setUser(prevUser => {
-            if (prevUser) {
-                const updatedUser = { ...prevUser, ...newUser };
-                localStorage.setItem('user', JSON.stringify(updatedUser));
-                return updatedUser;
-            }
-            return null;
-        });
-    };
-
-    const hasRole = (requiredRole: Role): boolean => {
-        if (!user) return false;
-        const roleHierarchy = {
-            [Role.User]: 1,
-            [Role.Admin]: 2,
-            [Role.SuperAdmin]: 3,
-        };
-        return roleHierarchy[user.role] >= roleHierarchy[requiredRole];
-    };
-
-    const isOwner = (resourceOwnerId: number | null | undefined): boolean => {
-        if (!user || resourceOwnerId === undefined || resourceOwnerId === null) {
-            return false;
-        }
-        return user.id === resourceOwnerId;
-    };
-
-    const contextValue = React.useMemo(() => ({
-        user, tokens, isAuthenticated, login, logout, updateUser, hasRole, isOwner, socket: socketRef.current
-    }), [user, tokens, isAuthenticated, socketRef.current, login, logout, updateUser, hasRole, isOwner]);
-
-    return (
-        <AuthContext.Provider value={contextValue}>
-            {children}
-        </AuthContext.Provider>
+    const contextValue = React.useMemo(
+        () => ({
+            user,
+            tokens,
+            isAuthenticated,
+            login,
+            logout,
+            updateUser,
+            hasRole,
+            isOwner,
+            socket: socketRef.current,
+        }),
+        [user, tokens, isAuthenticated, login, logout, updateUser, hasRole, isOwner]
     );
+
+    return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
 };
 
-export const useAuth = () => {
+export const useAuth = (): AuthContextType => {
     const context = useContext(AuthContext);
     if (context === undefined) {
         throw new Error('useAuth must be used within an AuthProvider');
