@@ -19,7 +19,7 @@ const PrivateRoute: React.FC<PrivateRouteProps> = ({ allowedRoles }) => {
 
     if (allowedRoles && !allowedRoles.some(role => hasRole(role))) {
         toast.error('You do not have permission to access this page.');
-        return <Navigate to="/dashboard" replace />; // Перенаправить на дашборд или страницу 403
+        return <Navigate to="/dashboard" replace />;
     }
 
     return <Outlet />;

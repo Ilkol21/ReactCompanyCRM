@@ -354,7 +354,7 @@ const CompanyDetail: React.FC = () => {
                     </Box>
                 )}
 
-                <Button onClick={() => navigate('/companies')} sx={{ mt: 3 }}>
+                <Button onClick={() => navigate('/companies')} sx={{ mt: 5 }}>
                     Back to Companies List
                 </Button>
             </Paper>

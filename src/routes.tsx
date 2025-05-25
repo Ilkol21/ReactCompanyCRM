@@ -14,7 +14,6 @@ import HistoryPage from './components/history/HistoryPage';
 import PrivateRoute from './components/common/PrivateRoute';
 import { Role } from './types';
 import { useAuth } from './context/AuthContext';
-import CreateCompany from './components/companies/CreateCompany';
 
 const AppRoutes: React.FC = () => {
     const { user, isAuthenticated } = useAuth();
@@ -37,33 +36,26 @@ const AppRoutes: React.FC = () => {
 
     return (
         <Routes>
-            {/* Публичные маршруты */}
             <Route path="/login" element={<SignIn />} />
             <Route path="/register" element={<SignUp />} />
             <Route path="/reset-password" element={<ResetPassword />} />
 
-            {/* Перенаправление на дашборд при успешной аутентификации */}
             <Route path="/" element={isAuthenticated ? getDashboardComponent() : <Navigate to="/login" replace />} />
             <Route path="/dashboard" element={getDashboardComponent()} />
 
-            {/* Защищенные маршруты для всех ролей */}
             <Route element={<PrivateRoute allowedRoles={[Role.User, Role.Admin, Role.SuperAdmin]} />}>
                 <Route path="/companies" element={<CompaniesList />} />
                 <Route path="/companies/:id" element={<CompanyDetail />} />
-                <Route path="/companies/create" element={<CreateCompany />} /> {/* <- обновлено здесь */}
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/profile/change-password" element={<ChangePassword />} />
             </Route>
 
-            {/* История доступна только для Admin и SuperAdmin */}
             <Route element={<PrivateRoute allowedRoles={[Role.Admin, Role.SuperAdmin]} />}>
                 <Route path="/history" element={<HistoryPage />} />
             </Route>
 
-            {/* Маршрут для выхода */}
             <Route path="/logout" element={<LogoutPage />} />
 
-            {/* Обработка несуществующих маршрутов */}
             <Route path="*" element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />} />
         </Routes>
     );

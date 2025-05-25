@@ -65,7 +65,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 const parsedTokens: AuthTokens = JSON.parse(storedAuthTokens);
                 const parsedUser: User = JSON.parse(storedUser);
 
-                // Нормализуем роль здесь:
                 parsedUser.role = normalizeRole(parsedUser.role);
 
                 const decodedToken: { exp: number } = jwtDecode(parsedTokens.accessToken);

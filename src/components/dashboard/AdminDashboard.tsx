@@ -28,7 +28,9 @@ import { toast } from 'react-toastify';
 
 import EditIcon from '@mui/icons-material/Edit';
 import type {Company, PaginatedResponse, User } from '@/types';
-import { Role } from '@/types'; // без type
+import { Role } from '@/types';
+import {Link as RouterLink} from "react-router-dom";
+import HistoryIcon from "@mui/icons-material/History"; // без type
 
 const AdminDashboard: React.FC = () => {
     const queryClient = useQueryClient();
@@ -218,7 +220,7 @@ const AdminDashboard: React.FC = () => {
                                         <TableCell>{user.email}</TableCell>
                                         <TableCell>{user.role}</TableCell>
                                         <TableCell>
-                                            {user.role !== Role.SuperAdmin && ( // Админ не может редактировать SuperAdmin'ов
+                                            {user.role !== Role.SuperAdmin && (
                                                 <Button
                                                     size="small"
                                                     startIcon={<EditIcon />}
@@ -227,6 +229,15 @@ const AdminDashboard: React.FC = () => {
                                                     Edit
                                                 </Button>
                                             )}
+                                            <Button
+                                                size="small"
+                                                component={RouterLink}
+                                                to={`/history?userId=${user.id}`}
+                                                startIcon={<HistoryIcon />}
+                                                color="secondary"
+                                            >
+                                                History
+                                            </Button>
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -245,7 +256,6 @@ const AdminDashboard: React.FC = () => {
                 </Paper>
             )}
 
-            {/* Отображение компаний (для Admin) */}
             <Typography variant="h5" sx={{ mt: 4, mb: 2 }}>
                 All Companies Overview
             </Typography>
@@ -275,7 +285,7 @@ const AdminDashboard: React.FC = () => {
                                         <TableCell>{company.id}</TableCell>
                                         <TableCell>{company.name}</TableCell>
                                         <TableCell>{company.service || 'N/A'}</TableCell>
-                                        <TableCell align="right">${company.capital?.toFixed(2) || '0.00'}</TableCell>
+                                        <TableCell align="right">${(Number(company.capital) || 0).toFixed(2)}</TableCell>
                                         <TableCell>{company.ownerId}</TableCell>
                                         <TableCell>{new Date(company.createdAt).toLocaleDateString()}</TableCell>
                                     </TableRow>
@@ -322,7 +332,6 @@ const AdminDashboard: React.FC = () => {
                                 label="Role"
                                 value={editUserRole}
                                 onChange={(e) => setEditUserRole(e.target.value as Role)}
-                                // Админ не может менять роль на SuperAdmin
                                 disabled={currentUserToEdit.role === Role.SuperAdmin || editUserRole === Role.SuperAdmin}
                             >
                                 {Object.values(Role)

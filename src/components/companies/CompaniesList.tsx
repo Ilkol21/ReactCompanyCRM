@@ -39,7 +39,6 @@ import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import { useAuth } from '../../context/AuthContext';
 import type { Company, PaginatedResponse } from '@/types';
-// Предполагается, что Role импортирован где-то
 import InfoIcon from '@mui/icons-material/Info';
 
 const CompaniesList: React.FC = () => {

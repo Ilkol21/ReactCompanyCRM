@@ -25,21 +25,30 @@ import {
     InputAdornment,
     IconButton,
 } from '@mui/material';
-
+import { useSearchParams } from 'react-router-dom';
 import ClearIcon from '@mui/icons-material/Clear';
 import SearchIcon from '@mui/icons-material/Search';
-import type { ActionType, EntityType, HistoryEntry, PaginatedResponse } from '@/types';
+import { ActionType, EntityType } from '@/types';
+import type { HistoryEntry, PaginatedResponse } from '@/types';
 
 const HistoryPage: React.FC = () => {
+    const [searchParams] = useSearchParams();
+    const userIdFromUrl = searchParams.get('userId') || '';
+
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [sortBy, setSortBy] = useState('timestamp');
     const [sortOrder, setSortOrder] = useState<'DESC' | 'ASC'>('DESC');
-    const [userIdFilter, setUserIdFilter] = useState('');
+    const [userIdFilter, setUserIdFilter] = useState(userIdFromUrl);
     const [actionTypeFilter, setActionTypeFilter] = useState<ActionType | ''>('');
     const [entityTypeFilter, setEntityTypeFilter] = useState<EntityType | ''>('');
     const [entityIdFilter, setEntityIdFilter] = useState('');
     const [searchDetails, setSearchDetails] = useState('');
+
+    React.useEffect(() => {
+        setUserIdFilter(userIdFromUrl);
+        setPage(0);
+    }, [userIdFromUrl]);
 
     const {
         data: historyData,

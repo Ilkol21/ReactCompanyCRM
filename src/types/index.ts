@@ -1,11 +1,9 @@
-// Общие типы для ролей, которые также должны соответствовать бэкенду
 export enum Role {
     User = 'User',
     Admin = 'Admin',
     SuperAdmin = 'SuperAdmin',
 }
 
-// Тип для аутентифицированного пользователя
 export interface User {
     id: number;
     email: string;
@@ -16,7 +14,6 @@ export interface User {
     updatedAt?: string;
 }
 
-// Тип для компании
 export interface Company {
     id: number;
     name: string;
@@ -30,7 +27,6 @@ export interface Company {
     updatedAt: string;
 }
 
-// Тип для истории действий
 export enum ActionType {
     USER_CREATED = 'USER_CREATED',
     USER_UPDATED = 'USER_UPDATED',
@@ -55,7 +51,7 @@ export enum EntityType {
 export interface HistoryEntry {
     id: number;
     userId: number;
-    user: User; // Может быть null, если пользователь удален
+    user: User;
     action: ActionType;
     entityType: EntityType;
     entityId?: number | null;
@@ -63,7 +59,6 @@ export interface HistoryEntry {
     timestamp: string;
 }
 
-// Общий тип для пагинированных данных
 export interface PaginatedResponse<T> {
     items: T[];
     total: number;

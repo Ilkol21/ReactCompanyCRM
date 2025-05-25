@@ -13,8 +13,8 @@ import {
     Paper,
     Divider,
     Button,
+    ListItemButton
 } from '@mui/material';
-
 import { useAuth } from '../../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import type { Company, PaginatedResponse } from '@/types';
@@ -69,16 +69,12 @@ const UserDashboard: React.FC = () => {
                 Welcome, {user?.fullName}!
             </Typography>
 
-            {/* Навигация */}
             <Box sx={{ mb: 3 }}>
                 <Button variant="contained" onClick={() => navigate('/profile')} sx={{ mr: 2 }}>
                     Profile
                 </Button>
-                <Button variant="contained" onClick={() => navigate('/companies')}>
+                <Button variant="contained" onClick={() => navigate('/companies')} sx={{ ml: 2 }}>
                     Companies List
-                </Button>
-                <Button variant="contained" onClick={() => navigate('/companies/create')} sx={{ ml: 2 }}>
-                    Create Company
                 </Button>
             </Box>
 
@@ -98,19 +94,21 @@ const UserDashboard: React.FC = () => {
                     <List>
                         {userCompaniesData?.items.map(company => (
                             <React.Fragment key={company.id}>
-                                <ListItem button component={Link} to={`/companies/${company.id}`}>
-                                    <ListItemText
-                                        primary={company.name}
-                                        secondary={`Service: ${company.service || 'N/A'} | Capital: $${typeof company.capital === 'number' ? company.capital.toFixed(2) : Number(company.capital || 0).toFixed(2)}`}
-                                    />
-                                    {company.logo && (
-                                        <Box
-                                            component="img"
-                                            src={company.logo}
-                                            alt={`${company.name} logo`}
-                                            sx={{ width: 50, height: 50, borderRadius: '50%', ml: 2, objectFit: 'cover' }}
+                                <ListItem disablePadding>
+                                    <ListItemButton component={Link} to={`/companies/${company.id}`}>
+                                        <ListItemText
+                                            primary={company.name}
+                                            secondary={`Service: ${company.service || 'N/A'} | Capital: $${typeof company.capital === 'number' ? company.capital.toFixed(2) : Number(company.capital || 0).toFixed(2)}`}
                                         />
-                                    )}
+                                        {company.logo && (
+                                            <Box
+                                                component="img"
+                                                src={company.logo}
+                                                alt={`${company.name} logo`}
+                                                sx={{ width: 50, height: 50, borderRadius: '50%', ml: 2, objectFit: 'cover' }}
+                                            />
+                                        )}
+                                    </ListItemButton>
                                 </ListItem>
                                 <Divider component="li" />
                             </React.Fragment>

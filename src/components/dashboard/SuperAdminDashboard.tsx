@@ -25,12 +25,13 @@ import {
     TablePagination,
 } from '@mui/material';
 import { toast } from 'react-toastify';
-
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
 import type {Company, PaginatedResponse, User } from '@/types';
 import { Role } from '@/types'; // без type
+import HistoryIcon from '@mui/icons-material/History';
 
 const SuperAdminDashboard: React.FC = () => {
     const queryClient = useQueryClient();
@@ -298,18 +299,29 @@ const SuperAdminDashboard: React.FC = () => {
                                             >
                                                 Edit
                                             </Button>
-                                            {user.role !== Role.SuperAdmin && ( // SuperAdmin не может удалить другого SuperAdmin'а через UI
+                                            {user.role !== Role.SuperAdmin && (
                                                 <Button
                                                     size="small"
                                                     color="error"
                                                     startIcon={<DeleteIcon />}
                                                     onClick={() => handleDeleteUser(user.id)}
                                                     disabled={deleteUserMutation.isPending}
+                                                    sx={{ mr: 1 }}
                                                 >
                                                     Delete
                                                 </Button>
                                             )}
+                                            <Button
+                                                size="small"
+                                                component={RouterLink}
+                                                to={`/history?userId=${user.id}`}
+                                                startIcon={<HistoryIcon />}
+                                                color="secondary"
+                                            >
+                                                History
+                                            </Button>
                                         </TableCell>
+
                                     </TableRow>
                                 ))}
                             </TableBody>
