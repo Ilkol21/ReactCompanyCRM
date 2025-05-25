@@ -29,12 +29,14 @@ import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
-import type {Company, PaginatedResponse, User } from '@/types';
-import { Role } from '@/types'; // без type
 import HistoryIcon from '@mui/icons-material/History';
+import type { Company, PaginatedResponse, User } from '@/types';
+import { Role } from '@/types'; // без type
 
 const SuperAdminDashboard: React.FC = () => {
     const queryClient = useQueryClient();
+    const navigate = useNavigate();
+
     const [isCreateAdminModalOpen, setIsCreateAdminModalOpen] = useState(false);
     const [newAdminName, setNewAdminName] = useState('');
     const [newAdminEmail, setNewAdminEmail] = useState('');
@@ -48,7 +50,7 @@ const SuperAdminDashboard: React.FC = () => {
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
 
-    // Fetch dashboard stats (companies count, total capital)
+    // Запросы данных
     const { data: statsData, isLoading: isLoadingStats, isError: isErrorStats } = useQuery<
         { totalCompanies: number; totalCapital: number }
     >({
@@ -59,7 +61,6 @@ const SuperAdminDashboard: React.FC = () => {
         },
     });
 
-    // Fetch all users (Admins and SuperAdmins can see all)
     const {
         data: usersData,
         isLoading: isLoadingUsers,
@@ -68,40 +69,35 @@ const SuperAdminDashboard: React.FC = () => {
         queryKey: ['users', page, rowsPerPage],
         queryFn: async () => {
             const response = await apiClient.get(`/users?page=${page + 1}&limit=${rowsPerPage}`);
-            return response.data.users; // Бэкенд возвращает { users: [], total: N }
+            return response.data;
         },
-        select: (data) => {
-            // Адаптируем к формату PaginatedResponse, если бэкенд возвращает items и total
-            return {
-                items: data.users || data, // Если data - это сразу массив users
-                total: data.total || data.length, // Если data.total нет, используем длину массива
-                page: page + 1,
-                limit: rowsPerPage,
-            };
-        },
+        select: (data) => ({
+            items: data.users || data,
+            total: data.total || data.length,
+            page: page + 1,
+            limit: rowsPerPage,
+        }),
     });
 
-    // Fetch companies for general overview (SuperAdmin can see all)
     const {
         data: companiesData,
         isLoading: isLoadingCompanies,
         isError: isErrorCompanies,
     } = useQuery<PaginatedResponse<Company>>({
-        queryKey: ['allCompanies'], // Fetch all companies regardless of owner for SuperAdmin
+        queryKey: ['allCompanies'],
         queryFn: async () => {
             const response = await apiClient.get('/companies');
-            return response.data.companies; // Бэкенд возвращает { companies: [], total: N }
+            return response.data;
         },
-        select: (data) => {
-            return {
-                items: data.companies || data,
-                total: data.total || data.length,
-                page: 1, // Для дашборда не используем пагинацию, но адаптируем тип
-                limit: 100,
-            };
-        },
+        select: (data) => ({
+            items: data.companies || data,
+            total: data.total || data.length,
+            page: 1,
+            limit: 100,
+        }),
     });
 
+    // Мутации
     const createAdminMutation = useMutation({
         mutationFn: (newAdmin: { fullName: string; email: string; password: string }) =>
             apiClient.post('/users/admin', newAdmin),
@@ -145,17 +141,28 @@ const SuperAdminDashboard: React.FC = () => {
         },
     });
 
-    const handleOpenCreateAdminModal = () => {
-        setIsCreateAdminModalOpen(true);
-    };
+    // Logout мутация
+    const logoutMutation = useMutation({
+        mutationFn: () => apiClient.post('/auth/logout'),
+        onSuccess: () => {
+            queryClient.clear();
+            navigate('/login');
+            toast.info('Logged out successfully.');
+        },
+        onError: (error: any) => {
+            console.error('Logout error:', error);
+            toast.error('Failed to logout.');
+        },
+    });
 
+    // Обработчики
+    const handleOpenCreateAdminModal = () => setIsCreateAdminModalOpen(true);
     const handleCloseCreateAdminModal = () => {
         setIsCreateAdminModalOpen(false);
         setNewAdminName('');
         setNewAdminEmail('');
         setNewAdminPassword('');
     };
-
     const handleCreateAdminSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!newAdminName || !newAdminEmail || !newAdminPassword) {
@@ -176,12 +183,10 @@ const SuperAdminDashboard: React.FC = () => {
         setEditUserRole(user.role);
         setEditUserModalOpen(true);
     };
-
     const handleCloseEditUserModal = () => {
         setEditUserModalOpen(false);
         setCurrentUserToEdit(null);
     };
-
     const handleEditUserSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (currentUserToEdit) {
@@ -202,20 +207,26 @@ const SuperAdminDashboard: React.FC = () => {
         }
     };
 
-    const handleChangePage = (event: unknown, newPage: number) => {
-        setPage(newPage);
+    const handleChangePage = (_: unknown, newPage: number) => setPage(newPage);
+    const handleChangeRowsPerPage = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setRowsPerPage(parseInt(e.target.value, 10));
+        setPage(0);
     };
 
-    const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
-        setPage(0);
+    const handleLogoutClick = () => {
+        logoutMutation.mutate();
     };
 
     return (
         <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-            <Typography variant="h4" gutterBottom>
-                SuperAdmin Dashboard
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                <Typography variant="h4" gutterBottom>
+                    SuperAdmin Dashboard
+                </Typography>
+                <Button variant="outlined" color="error" onClick={handleLogoutClick} disabled={logoutMutation.isLoading}>
+                    {logoutMutation.isLoading ? <CircularProgress size={20} /> : 'Logout'}
+                </Button>
+            </Box>
 
             {/* Статистика компаний */}
             <Grid container spacing={3} sx={{ mb: 4 }}>
@@ -236,51 +247,47 @@ const SuperAdminDashboard: React.FC = () => {
                 <Grid item xs={12} md={6}>
                     <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column' }}>
                         <Typography variant="h6" color="primary" gutterBottom>
-                            Total Capital Across All Companies
+                            Total Capital
                         </Typography>
                         {isLoadingStats ? (
                             <CircularProgress />
                         ) : isErrorStats ? (
-                            <Alert severity="error">Failed to load capital stats.</Alert>
+                            <Alert severity="error">Failed to load company stats.</Alert>
                         ) : (
-                            <Typography variant="h3">${statsData?.totalCapital?.toFixed(2)}</Typography>
+                            <Typography variant="h3">${statsData?.totalCapital.toLocaleString()}</Typography>
                         )}
                     </Paper>
                 </Grid>
             </Grid>
 
-            {/* Управление пользователями/админами */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Typography variant="h5" gutterBottom>
-                    Manage Users & Admins
-                </Typography>
+            {/* Пользователи */}
+            <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="h5">Users</Typography>
                 <Button
                     variant="contained"
-                    color="primary"
                     startIcon={<AddIcon />}
                     onClick={handleOpenCreateAdminModal}
+                    disabled={createAdminMutation.isLoading}
                 >
-                    Create New Admin
+                    Create Admin
                 </Button>
             </Box>
 
             {isLoadingUsers ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-                    <CircularProgress />
-                </Box>
+                <CircularProgress />
             ) : isErrorUsers ? (
                 <Alert severity="error">Failed to load users.</Alert>
             ) : (
-                <Paper sx={{ width: '100%', overflow: 'hidden' }}>
-                    <TableContainer sx={{ maxHeight: 600 }}>
-                        <Table stickyHeader aria-label="users table">
+                <Paper>
+                    <TableContainer>
+                        <Table>
                             <TableHead>
                                 <TableRow>
                                     <TableCell>ID</TableCell>
                                     <TableCell>Full Name</TableCell>
                                     <TableCell>Email</TableCell>
                                     <TableCell>Role</TableCell>
-                                    <TableCell>Actions</TableCell>
+                                    <TableCell align="right">Actions</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
@@ -290,27 +297,22 @@ const SuperAdminDashboard: React.FC = () => {
                                         <TableCell>{user.fullName}</TableCell>
                                         <TableCell>{user.email}</TableCell>
                                         <TableCell>{user.role}</TableCell>
-                                        <TableCell>
+                                        <TableCell align="right">
                                             <Button
                                                 size="small"
                                                 startIcon={<EditIcon />}
                                                 onClick={() => handleOpenEditUserModal(user)}
-                                                sx={{ mr: 1 }}
                                             >
                                                 Edit
                                             </Button>
-                                            {user.role !== Role.SuperAdmin && (
-                                                <Button
-                                                    size="small"
-                                                    color="error"
-                                                    startIcon={<DeleteIcon />}
-                                                    onClick={() => handleDeleteUser(user.id)}
-                                                    disabled={deleteUserMutation.isPending}
-                                                    sx={{ mr: 1 }}
-                                                >
-                                                    Delete
-                                                </Button>
-                                            )}
+                                            <Button
+                                                size="small"
+                                                color="error"
+                                                startIcon={<DeleteIcon />}
+                                                onClick={() => handleDeleteUser(user.id)}
+                                            >
+                                                Delete
+                                            </Button>
                                             <Button
                                                 size="small"
                                                 component={RouterLink}
@@ -321,45 +323,41 @@ const SuperAdminDashboard: React.FC = () => {
                                                 History
                                             </Button>
                                         </TableCell>
-
                                     </TableRow>
                                 ))}
                             </TableBody>
                         </Table>
                     </TableContainer>
                     <TablePagination
-                        rowsPerPageOptions={[5, 10, 25]}
                         component="div"
                         count={usersData?.total || 0}
-                        rowsPerPage={rowsPerPage}
                         page={page}
                         onPageChange={handleChangePage}
+                        rowsPerPage={rowsPerPage}
                         onRowsPerPageChange={handleChangeRowsPerPage}
                     />
                 </Paper>
             )}
 
-            {/* Отображение компаний (для SuperAdmin) */}
-            <Typography variant="h5" sx={{ mt: 4, mb: 2 }}>
-                All Companies Overview
-            </Typography>
-            {isLoadingCompanies ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+            {/* Companies List */}
+            <Box sx={{ mt: 6 }}>
+                <Typography variant="h5" gutterBottom>
+                    Companies ({companiesData?.total || 0})
+                </Typography>
+                {isLoadingCompanies ? (
                     <CircularProgress />
-                </Box>
-            ) : isErrorCompanies ? (
-                <Alert severity="error">Failed to load companies.</Alert>
-            ) : (
-                <Paper sx={{ width: '100%', overflow: 'hidden', mb: 4 }}>
-                    <TableContainer sx={{ maxHeight: 600 }}>
-                        <Table stickyHeader aria-label="companies table">
+                ) : isErrorCompanies ? (
+                    <Alert severity="error">Failed to load companies.</Alert>
+                ) : (
+                    <TableContainer component={Paper}>
+                        <Table size="small">
                             <TableHead>
                                 <TableRow>
                                     <TableCell>ID</TableCell>
                                     <TableCell>Name</TableCell>
-                                    <TableCell>Service</TableCell>
-                                    <TableCell align="right">Capital</TableCell>
-                                    <TableCell>Owner ID</TableCell>
+                                    <TableCell>Capital</TableCell>
+                                    <TableCell>Owner</TableCell>
+                                    <TableCell>Employees</TableCell>
                                     <TableCell>Created At</TableCell>
                                 </TableRow>
                             </TableHead>
@@ -367,29 +365,24 @@ const SuperAdminDashboard: React.FC = () => {
                                 {companiesData?.items.map((company) => (
                                     <TableRow key={company.id}>
                                         <TableCell>{company.id}</TableCell>
-                                        <TableCell>{company.name}</TableCell>
-                                        <TableCell>{company.service || 'N/A'}</TableCell>
-                                        <TableCell align="right">
-                                            ${typeof company.capital === 'number'
-                                            ? company.capital.toFixed(2)
-                                            : Number(company.capital)?.toFixed(2) || '0.00'}
+                                        <TableCell>
+                                            <RouterLink to={`/companies/${company.id}`} style={{ textDecoration: 'none' }}>
+                                                {company.name}
+                                            </RouterLink>
                                         </TableCell>
-                                        <TableCell>{company.ownerId}</TableCell>
+                                        <TableCell>${company.capital.toLocaleString()}</TableCell>
+                                        <TableCell>{company.owner?.fullName || '-'}</TableCell>
+                                        <TableCell>{company.employeesCount || 0}</TableCell>
                                         <TableCell>{new Date(company.createdAt).toLocaleDateString()}</TableCell>
                                     </TableRow>
                                 ))}
                             </TableBody>
                         </Table>
                     </TableContainer>
-                    {companiesData?.total === 0 && (
-                        <Box sx={{ p: 2, textAlign: 'center' }}>
-                            <Typography>No companies found.</Typography>
-                        </Box>
-                    )}
-                </Paper>
-            )}
+                )}
+            </Box>
 
-            {/* Модальное окно создания админа */}
+            {/* Create Admin Modal */}
             <Dialog open={isCreateAdminModalOpen} onClose={handleCloseCreateAdminModal}>
                 <DialogTitle>Create New Admin</DialogTitle>
                 <DialogContent>
@@ -406,7 +399,7 @@ const SuperAdminDashboard: React.FC = () => {
                             margin="normal"
                             required
                             fullWidth
-                            label="Email Address"
+                            label="Email"
                             type="email"
                             value={newAdminEmail}
                             onChange={(e) => setNewAdminEmail(e.target.value)}
@@ -423,66 +416,66 @@ const SuperAdminDashboard: React.FC = () => {
                     </Box>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={handleCloseCreateAdminModal}>Cancel</Button>
+                    <Button onClick={handleCloseCreateAdminModal} disabled={createAdminMutation.isLoading}>
+                        Cancel
+                    </Button>
                     <Button
                         onClick={handleCreateAdminSubmit}
+                        disabled={createAdminMutation.isLoading}
                         variant="contained"
-                        disabled={createAdminMutation.isPending}
                     >
-                        {createAdminMutation.isPending ? <CircularProgress size={24} color="inherit" /> : 'Create'}
+                        {createAdminMutation.isLoading ? <CircularProgress size={24} /> : 'Create'}
                     </Button>
                 </DialogActions>
             </Dialog>
 
-            {/* Модальное окно редактирования пользователя */}
+            {/* Edit User Modal */}
             <Dialog open={editUserModalOpen} onClose={handleCloseEditUserModal}>
                 <DialogTitle>Edit User</DialogTitle>
                 <DialogContent>
-                    {currentUserToEdit && (
-                        <Box component="form" onSubmit={handleEditUserSubmit} sx={{ mt: 1 }}>
-                            <TextField
-                                margin="normal"
-                                required
-                                fullWidth
-                                label="Full Name"
-                                value={editUserName}
-                                onChange={(e) => setEditUserName(e.target.value)}
-                            />
-                            <TextField
-                                margin="normal"
-                                required
-                                fullWidth
-                                label="Email Address"
-                                type="email"
-                                value={editUserEmail}
-                                onChange={(e) => setEditUserEmail(e.target.value)}
-                            />
-                            <TextField
-                                select
-                                margin="normal"
-                                required
-                                fullWidth
-                                label="Role"
-                                value={editUserRole}
-                                onChange={(e) => setEditUserRole(e.target.value as Role)}
-                            >
-                                {Object.values(Role).map((role) => (
-                                    <MenuItem key={role} value={role}>
-                                        {role}
-                                    </MenuItem>
-                                ))}
-                            </TextField>
-                        </Box>
-                    )}
+                    <Box component="form" onSubmit={handleEditUserSubmit} sx={{ mt: 1 }}>
+                        <TextField
+                            margin="normal"
+                            required
+                            fullWidth
+                            label="Full Name"
+                            value={editUserName}
+                            onChange={(e) => setEditUserName(e.target.value)}
+                        />
+                        <TextField
+                            margin="normal"
+                            required
+                            fullWidth
+                            label="Email"
+                            type="email"
+                            value={editUserEmail}
+                            onChange={(e) => setEditUserEmail(e.target.value)}
+                        />
+                        <TextField
+                            select
+                            margin="normal"
+                            required
+                            fullWidth
+                            label="Role"
+                            value={editUserRole}
+                            onChange={(e) => setEditUserRole(e.target.value as Role)}
+                        >
+                            <MenuItem value={Role.User}>User</MenuItem>
+                            <MenuItem value={Role.Admin}>Admin</MenuItem>
+                            <MenuItem value={Role.SuperAdmin}>SuperAdmin</MenuItem>
+                        </TextField>
+                    </Box>
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={handleCloseEditUserModal}>Cancel</Button>
+                    <Button onClick={handleCloseEditUserModal} disabled={updateUserMutation.isLoading}>
+                        Cancel
+                    </Button>
                     <Button
                         onClick={handleEditUserSubmit}
+                        disabled={updateUserMutation.isLoading}
                         variant="contained"
-                        disabled={updateUserMutation.isPending}
                     >
-                        {updateUserMutation.isPending ? <CircularProgress size={24} color="inherit" /> : 'Save Changes'}
+                        {updateUserMutation.isLoading ? <CircularProgress size={24} /> : 'Save'}
                     </Button>
                 </DialogActions>
             </Dialog>

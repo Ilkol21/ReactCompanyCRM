@@ -14,6 +14,7 @@ import HistoryPage from './components/history/HistoryPage';
 import PrivateRoute from './components/common/PrivateRoute';
 import { Role } from './types';
 import { useAuth } from './context/AuthContext';
+import Logout from './components/auth/Logout';
 
 const AppRoutes: React.FC = () => {
     const { user, isAuthenticated } = useAuth();
@@ -54,19 +55,12 @@ const AppRoutes: React.FC = () => {
                 <Route path="/history" element={<HistoryPage />} />
             </Route>
 
-            <Route path="/logout" element={<LogoutPage />} />
+            <Route path="/logout" element={<Logout />} />
 
             <Route path="*" element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />} />
         </Routes>
     );
 };
 
-const LogoutPage: React.FC = () => {
-    const { logout } = useAuth();
-    React.useEffect(() => {
-        logout();
-    }, [logout]);
-    return <Navigate to="/login" replace />;
-};
 
 export default AppRoutes;

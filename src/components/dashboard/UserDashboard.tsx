@@ -54,14 +54,16 @@ const UserDashboard: React.FC = () => {
         }),
     });
 
-    // Подготовка данных для графика
-    // Допустим, у company есть поле priceHistory: Array<{ date: string, capital: number }>
-    // Если нет, сделаем упрощённый график по текущему капиталу компаний с именами по оси X
-
     const chartData = userCompaniesData?.items.map(company => ({
         name: company.name,
         capital: company.capital ?? 0,
     })) || [];
+
+    // Функция логаута
+    const handleLogout = () => {
+        localStorage.removeItem('token');  // или что у тебя хранит токен
+        navigate('/login');
+    };
 
     return (
         <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
@@ -73,8 +75,11 @@ const UserDashboard: React.FC = () => {
                 <Button variant="contained" onClick={() => navigate('/profile')} sx={{ mr: 2 }}>
                     Profile
                 </Button>
-                <Button variant="contained" onClick={() => navigate('/companies')} sx={{ ml: 2 }}>
+                <Button variant="contained" onClick={() => navigate('/companies')} sx={{ mr: 2 }}>
                     Companies List
+                </Button>
+                <Button variant="outlined" color="error" onClick={handleLogout}>
+                    Logout
                 </Button>
             </Box>
 
@@ -117,7 +122,6 @@ const UserDashboard: React.FC = () => {
                 )}
             </Paper>
 
-            {/* График капитала компаний */}
             <Paper sx={{ p: 3 }}>
                 <Typography variant="h5" gutterBottom>
                     Company Capital Overview

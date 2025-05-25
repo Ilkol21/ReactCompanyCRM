@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/apiClient';
 import {
     Container,
@@ -27,13 +28,16 @@ import {
 import { toast } from 'react-toastify';
 
 import EditIcon from '@mui/icons-material/Edit';
-import type {Company, PaginatedResponse, User } from '@/types';
+import HistoryIcon from '@mui/icons-material/History';
+
+import type { Company, PaginatedResponse, User } from '@/types';
 import { Role } from '@/types';
-import {Link as RouterLink} from "react-router-dom";
-import HistoryIcon from "@mui/icons-material/History"; // без type
+import { Link as RouterLink } from 'react-router-dom';
 
 const AdminDashboard: React.FC = () => {
     const queryClient = useQueryClient();
+    const navigate = useNavigate();
+
     const [editUserModalOpen, setEditUserModalOpen] = useState(false);
     const [currentUserToEdit, setCurrentUserToEdit] = useState<User | null>(null);
     const [editUserName, setEditUserName] = useState('');
@@ -43,7 +47,12 @@ const AdminDashboard: React.FC = () => {
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
 
-    // Fetch dashboard stats (companies count, total capital)
+    const handleLogout = () => {
+        localStorage.removeItem('authToken'); // очистка токена
+        queryClient.clear(); // очистка кэша react-query
+        navigate('/login'); // редирект на страницу входа
+    };
+
     const { data: statsData, isLoading: isLoadingStats, isError: isErrorStats } = useQuery<
         { totalCompanies: number; totalCapital: number }
     >({
@@ -54,7 +63,6 @@ const AdminDashboard: React.FC = () => {
         },
     });
 
-    // Fetch all users (Admins can see all users, but not create/delete admins)
     const {
         data: usersData,
         isLoading: isLoadingUsers,
@@ -63,37 +71,33 @@ const AdminDashboard: React.FC = () => {
         queryKey: ['users', page, rowsPerPage],
         queryFn: async () => {
             const response = await apiClient.get(`/users?page=${page + 1}&limit=${rowsPerPage}`);
-            return response.data.users; // Бэкенд возвращает { users: [], total: N }
+            return response.data;
         },
-        select: (data) => {
-            return {
-                items: data.users || data,
-                total: data.total || data.length,
-                page: page + 1,
-                limit: rowsPerPage,
-            };
-        },
+        select: (data) => ({
+            items: data.users || data,
+            total: data.total || data.length,
+            page: page + 1,
+            limit: rowsPerPage,
+        }),
     });
 
-    // Fetch companies for general overview (Admin can see all)
+    // Запрос всех компаний
     const {
         data: companiesData,
         isLoading: isLoadingCompanies,
         isError: isErrorCompanies,
     } = useQuery<PaginatedResponse<Company>>({
-        queryKey: ['allCompanies'], // Fetch all companies regardless of owner for Admin
+        queryKey: ['allCompanies'],
         queryFn: async () => {
             const response = await apiClient.get('/companies');
-            return response.data.companies; // Бэкенд возвращает { companies: [], total: N }
+            return response.data;
         },
-        select: (data) => {
-            return {
-                items: data.companies || data,
-                total: data.total || data.length,
-                page: 1,
-                limit: 100,
-            };
-        },
+        select: (data) => ({
+            items: data.companies || data,
+            total: data.total || data.length,
+            page: 1,
+            limit: 100,
+        }),
     });
 
     const updateUserMutation = useMutation({
@@ -126,7 +130,6 @@ const AdminDashboard: React.FC = () => {
     const handleEditUserSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (currentUserToEdit) {
-            // Админ не может менять роль на SuperAdmin
             if (editUserRole === Role.SuperAdmin) {
                 toast.error('Admins cannot set user role to SuperAdmin.');
                 return;
@@ -153,9 +156,14 @@ const AdminDashboard: React.FC = () => {
 
     return (
         <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-            <Typography variant="h4" gutterBottom>
-                Admin Dashboard
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h4" gutterBottom>
+                    Admin Dashboard
+                </Typography>
+                <Button variant="outlined" color="error" onClick={handleLogout}>
+                    Logout
+                </Button>
+            </Box>
 
             {/* Статистика компаний */}
             <Grid container spacing={3} sx={{ mb: 4 }}>
@@ -275,8 +283,6 @@ const AdminDashboard: React.FC = () => {
                                     <TableCell>Name</TableCell>
                                     <TableCell>Service</TableCell>
                                     <TableCell align="right">Capital</TableCell>
-                                    <TableCell>Owner ID</TableCell>
-                                    <TableCell>Created At</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
@@ -284,77 +290,59 @@ const AdminDashboard: React.FC = () => {
                                     <TableRow key={company.id}>
                                         <TableCell>{company.id}</TableCell>
                                         <TableCell>{company.name}</TableCell>
-                                        <TableCell>{company.service || 'N/A'}</TableCell>
-                                        <TableCell align="right">${(Number(company.capital) || 0).toFixed(2)}</TableCell>
-                                        <TableCell>{company.ownerId}</TableCell>
-                                        <TableCell>{new Date(company.createdAt).toLocaleDateString()}</TableCell>
+                                        <TableCell>{company.service}</TableCell>
+                                        <TableCell align="right">${Number(company.capital).toFixed(2)}</TableCell>
                                     </TableRow>
                                 ))}
                             </TableBody>
                         </Table>
                     </TableContainer>
-                    {companiesData?.total === 0 && (
-                        <Box sx={{ p: 2, textAlign: 'center' }}>
-                            <Typography>No companies found.</Typography>
-                        </Box>
-                    )}
                 </Paper>
             )}
 
             {/* Модальное окно редактирования пользователя */}
-            <Dialog open={editUserModalOpen} onClose={handleCloseEditUserModal}>
+            <Dialog open={editUserModalOpen} onClose={handleCloseEditUserModal} maxWidth="sm" fullWidth>
                 <DialogTitle>Edit User</DialogTitle>
-                <DialogContent>
-                    {currentUserToEdit && (
-                        <Box component="form" onSubmit={handleEditUserSubmit} sx={{ mt: 1 }}>
-                            <TextField
-                                margin="normal"
-                                required
-                                fullWidth
-                                label="Full Name"
-                                value={editUserName}
-                                onChange={(e) => setEditUserName(e.target.value)}
-                            />
-                            <TextField
-                                margin="normal"
-                                required
-                                fullWidth
-                                label="Email Address"
-                                type="email"
-                                value={editUserEmail}
-                                onChange={(e) => setEditUserEmail(e.target.value)}
-                            />
-                            <TextField
-                                select
-                                margin="normal"
-                                required
-                                fullWidth
-                                label="Role"
-                                value={editUserRole}
-                                onChange={(e) => setEditUserRole(e.target.value as Role)}
-                                disabled={currentUserToEdit.role === Role.SuperAdmin || editUserRole === Role.SuperAdmin}
-                            >
-                                {Object.values(Role)
-                                    .filter(role => role !== Role.SuperAdmin) // Админ не может устанавливать SuperAdmin
-                                    .map((role) => (
-                                        <MenuItem key={role} value={role}>
-                                            {role}
-                                        </MenuItem>
-                                    ))}
-                            </TextField>
-                        </Box>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseEditUserModal}>Cancel</Button>
-                    <Button
-                        onClick={handleEditUserSubmit}
-                        variant="contained"
-                        disabled={updateUserMutation.isPending}
-                    >
-                        {updateUserMutation.isPending ? <CircularProgress size={24} color="inherit" /> : 'Save Changes'}
-                    </Button>
-                </DialogActions>
+                <form onSubmit={handleEditUserSubmit}>
+                    <DialogContent dividers>
+                        <TextField
+                            label="Full Name"
+                            fullWidth
+                            margin="normal"
+                            value={editUserName}
+                            onChange={(e) => setEditUserName(e.target.value)}
+                            required
+                        />
+                        <TextField
+                            label="Email"
+                            type="email"
+                            fullWidth
+                            margin="normal"
+                            value={editUserEmail}
+                            onChange={(e) => setEditUserEmail(e.target.value)}
+                            required
+                        />
+                        <TextField
+                            select
+                            label="Role"
+                            fullWidth
+                            margin="normal"
+                            value={editUserRole}
+                            onChange={(e) => setEditUserRole(e.target.value as Role)}
+                            required
+                        >
+                            <MenuItem value={Role.User}>User</MenuItem>
+                            <MenuItem value={Role.Admin}>Admin</MenuItem>
+                            {/* Не даём ставить SuperAdmin */}
+                        </TextField>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={handleCloseEditUserModal}>Cancel</Button>
+                        <Button type="submit" disabled={updateUserMutation.isLoading} variant="contained" color="primary">
+                            Save
+                        </Button>
+                    </DialogActions>
+                </form>
             </Dialog>
         </Container>
     );
